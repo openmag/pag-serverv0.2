@@ -8,11 +8,11 @@ import com.anheinno.pag.lib.codec.PagVersion;
 
 public class PagMobileEndpoint extends PagClientEndpoint {
 
-	public static final int INIT_INTERVAL = 120; /* in seconds */
-	public static final int INC_INTERVAL_STEP = 180; /* in seconds */
-	public static final int DEC_INTERVAL_STEP = 90;
+	public static final int INIT_INTERVAL = 400; /* in seconds */
+	public static final int INC_INTERVAL_STEP = 200; /* in seconds */
+	public static final int DEC_INTERVAL_STEP = 100;
 	public static final int MIN_INTERVAL = 110; /* in seconds */
-	public static final int MAX_INTERVAL = 2400; /* in seconds */
+	public static final int MAX_INTERVAL = 600; /* in seconds */
 	public static final int INTERVAL_KEEP_TIMES = 30;
 	
 	private int _interval = 0;

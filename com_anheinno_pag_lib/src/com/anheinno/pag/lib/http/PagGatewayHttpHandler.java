@@ -1,8 +1,6 @@
 package com.anheinno.pag.lib.http;
 
 import java.net.URI;
-import java.util.Collection;
-import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
@@ -37,125 +35,134 @@ public class PagGatewayHttpHandler extends SimpleChannelUpstreamHandler {
 
 		QueryStringDecoder query = new QueryStringDecoder(request.getUri());
 		String path = query.getPath();
-		if(path.endsWith("push")) {
-			Map<String, List<String>> params = query.getParameters();
-			if (!params.isEmpty() && params.containsKey("DEST") && params.containsKey("APP")) {
-				Hashtable<String, String> dest_ids = new Hashtable<String, String>();
-				String app_id = null;
-				String msg_id = null;
-				List<String> tmp = params.get("DEST");
-				for(int i = 0; i < tmp.size(); i ++) {
-					String id = tmp.get(i);
-					if(!dest_ids.containsKey(id)) {
-						dest_ids.put(id, id);
-					}
-				}
-				tmp = params.get("APP");
-				if(tmp != null && tmp.size() > 0) {
-					app_id = tmp.get(0);
-				}
-				if(dest_ids.size() == 1 && params.containsKey("ID")) {
-					tmp = params.get("ID");
-					if(tmp != null && tmp.size() > 0) {
-						msg_id = tmp.get(0);
-					}
-				}
-				Collection<String> enum_ids = dest_ids.values();
-				String[] dests = new String[enum_ids.size()];
-				enum_ids.toArray(dests);
-				if(dests.length > 0 && app_id != null) {
-					PagEndpointManager manager = PagEndpointManager.getInstance();					
-					if(dests.length == 1) {
-						String dest = dests[0];
-						PagClientEndpoint ep = manager.getEndpointById(dest);
-						if(ep == null) {
-							errorResponse(e.getChannel(), HttpResponseStatus.NOT_FOUND, "Destination " + dest + " not found!");
-						}else {
-							PagRequest notify = new PagRequest(ep.getProtocolVersion(), PagMethod.NOTI);
-							notify.setDestination(dest);
-							if(msg_id != null) {
-								notify.addHeader(PagHeaders.Names.MSGID, msg_id);
-							}
-							if(request.containsHeader(HttpHeaders.Names.CONTENT_TYPE)) {
-								notify.addHeader(PagHeaders.Names.CONTENT_TYPE, request.getHeader(HttpHeaders.Names.CONTENT_TYPE));
-							}
-							notify.setContent(request.getContent());
-							ep.sendRequest(notify);
-							okResponse(e.getChannel());
-						}
-					}else {
-						StringBuffer resp_status = new StringBuffer();
-						for(int i = 0; i < dests.length; i ++) {
-							PagClientEndpoint ep = manager.getEndpointById(dests[i]);
-							if(ep == null) {
-								resp_status.append("<status>" + HttpResponseStatus.NOT_FOUND.toString() + "</status>");
-							}else {
-								PagRequest notify = new PagRequest(ep.getProtocolVersion(), PagMethod.NOTI);
-								notify.setDestination(dests[i]);
-								notify.setContent(request.getContent());
-								if(request.containsHeader(HttpHeaders.Names.CONTENT_TYPE)) {
-									notify.addHeader(PagHeaders.Names.CONTENT_TYPE, request.getHeader(HttpHeaders.Names.CONTENT_TYPE));
-								}
-								ep.sendRequest(notify);
-								resp_status.append("<status>" + HttpResponseStatus.OK + "</status>");
-							}
-						}
-						errorResponse(e.getChannel(), HttpResponseStatus.MULTI_STATUS, resp_status.toString());
-					}
-				}else if(dests.length == 0) {
-					errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "No DEST specified. Format: push?APP=<app>&DEST=<uri>&ID=<msgid>. DEST can be multiple. ID is optinal and effective only when there is one DEST.");					
-				}else if(app_id == null) {
-					errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "No APP specified. Format: push?APP=<app>&DEST=<uri>&ID=<msgid>. DEST can be multiple. ID is optinal and effective only when there is one DEST.");					
-				}
-			}else {
-				errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "Format: push?APP=<app>&DEST=<uri>&ID=<msgid>. DEST can be multiple. ID is optinal and effective only when there is one DEST.");									
-			}
+		Map<String, List<String>> params = query.getParameters();
+		if(path.endsWith("noti") || path.endsWith("push")) {
+			push(request, params, e.getChannel());			
+		} else if(path.endsWith("ack")) {
+			ack(request, params, e.getChannel());
 		} else if(path.endsWith("register")) {
-			Map<String, List<String>> params = query.getParameters();
-			if(!params.isEmpty() && params.containsKey("APP") && params.containsKey("URI")) {
-				String app_id = null;
-				URI uri = null;
-				List<String> ids = params.get("APP");
-				if(ids != null && ids.size() > 0) {
-					app_id = ids.get(0);
-				}
-				List<String> urls = params.get("URI");
-				if(urls != null && urls.size() > 0) {
-					try {
-						uri = new URI(urls.get(0));
-					}catch(final Exception urle) {						
-					}
-				}
-				if(app_id != null && uri != null) {
-					PagEndpointManager.getInstance().addHttpEndpoint(app_id, uri);
-					okResponse(e.getChannel());
-				}else if(app_id == null) {
-					errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "No APP specified. Format: register?APP=<app>&URI=<uri>");
-				}else if(uri == null) {
-					errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "No URI specified. Format: register?APP=<app>&URI=<uri>");
-				}
-			}else {
-				errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "Format: register?APP=<app>&URI=<uri>");				
-			}
+			register(request, params, e.getChannel());
 		} else if(path.endsWith("unregister")) {
-			Map<String, List<String>> params = query.getParameters();
-			if(!params.isEmpty() && params.containsKey("APP")) {
-				String app_id = null;
-				List<String> ids = params.get("APP");
-				if(ids != null && ids.size() > 0) {
-					app_id = ids.get(0);
-				}
-				if(app_id != null) {
-					PagEndpointManager.getInstance().removeHttpEndpoint(app_id);
-					okResponse(e.getChannel());
-				}else {
-					errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "No app specified. Format: unregister?APP=<app>");
-				}
-			}else {
-				errorResponse(e.getChannel(), HttpResponseStatus.BAD_REQUEST, "Format: unregister?APP=<app>");
-			}
+			unregister(request, params, e.getChannel());
 		} else {
 			errorResponse(e.getChannel(), HttpResponseStatus.NOT_IMPLEMENTED, "Only push/register/unregister are implemented!");
+		}
+	}
+	
+	private void push(HttpRequest request, Map<String, List<String>> params, Channel ch) {
+		String[] dest_ids = PagGatewayHttpUtility.getParams(params, "DEST");
+		String app_id =  PagGatewayHttpUtility.getParam(params, "APP");
+		String msg_id = null;
+		if(dest_ids.length == 1 && request.containsHeader(PagGatewayHttpUtility.getHeaderPag2Http(PagHeaders.Names.MSGID))) {
+			msg_id = request.getHeader(PagGatewayHttpUtility.getHeaderPag2Http(PagHeaders.Names.MSGID));
+		}
+		if(app_id != null && request.containsHeader(PagGatewayHttpUtility.getHeaderPag2Http("URI"))) {
+			String noti_uri = request.getHeader(PagGatewayHttpUtility.getHeaderPag2Http("URI"));
+			try {
+				PagEndpointManager.getInstance().addHttpEndpoint(app_id, new URI(noti_uri));
+			}catch(final Exception uri_e) {
+			}
+		}
+		if(dest_ids != null && dest_ids.length > 0 && app_id != null) {
+			PagEndpointManager manager = PagEndpointManager.getInstance();					
+			if(dest_ids.length == 1) {
+				String dest = dest_ids[0];
+				PagClientEndpoint ep = manager.getEndpointById(dest);
+				if(ep == null) {
+					errorResponse(ch, HttpResponseStatus.NOT_FOUND, "Destination " + dest + " not found!");
+				}else {
+					PagRequest notify = new PagRequest(ep.getProtocolVersion(), PagMethod.NOTI);
+					notify.setDestination(dest);
+					if(msg_id != null) {
+						notify.addHeader(PagHeaders.Names.MSGID, msg_id);
+					}
+					if(request.containsHeader(HttpHeaders.Names.CONTENT_TYPE)) {
+						notify.addHeader(PagHeaders.Names.CONTENT_TYPE, request.getHeader(HttpHeaders.Names.CONTENT_TYPE));
+					}
+					notify.setContent(request.getContent());
+					ep.sendRequest(notify);
+					okResponse(ch);
+				}
+			}else {
+				StringBuffer resp_status = new StringBuffer();
+				for(int i = 0; i < dest_ids.length; i ++) {
+					PagClientEndpoint ep = manager.getEndpointById(dest_ids[i]);
+					if(ep == null) {
+						resp_status.append("<status>" + HttpResponseStatus.NOT_FOUND.toString() + "</status>");
+					}else {
+						PagRequest notify = new PagRequest(ep.getProtocolVersion(), PagMethod.NOTI);
+						notify.setDestination(dest_ids[i]);
+						notify.setContent(request.getContent());
+						if(request.containsHeader(HttpHeaders.Names.CONTENT_TYPE)) {
+							notify.addHeader(PagHeaders.Names.CONTENT_TYPE, request.getHeader(HttpHeaders.Names.CONTENT_TYPE));
+						}
+						ep.sendRequest(notify);
+						resp_status.append("<status>" + HttpResponseStatus.OK + "</status>");
+					}
+				}
+				errorResponse(ch, HttpResponseStatus.MULTI_STATUS, resp_status.toString());
+			}
+		}else {
+			errorResponse(ch, HttpResponseStatus.BAD_REQUEST, "Format: noti?APP=<app>&DEST=<uri>. DEST can be multiple. Header X-Anhe-PAG-MSGID is optinal and effective only when there is one DEST.");									
+		}
+	}
+	
+	private void ack(HttpRequest request, Map<String, List<String>> params, Channel ch) {
+		String app_id = PagGatewayHttpUtility.getParam(params, "APP");
+		String dest_id = PagGatewayHttpUtility.getParam(params, "DEST");
+		String msg_id = null;
+		if(request.containsHeader(PagGatewayHttpUtility.getHeaderPag2Http(PagHeaders.Names.MSGID))) {
+			msg_id = request.getHeader(PagGatewayHttpUtility.getHeaderPag2Http(PagHeaders.Names.MSGID));
+		}
+		if(app_id != null && request.containsHeader(PagGatewayHttpUtility.getHeaderPag2Http("URI"))) {
+			String noti_uri = request.getHeader(PagGatewayHttpUtility.getHeaderPag2Http("URI"));
+			try {
+				PagEndpointManager.getInstance().addHttpEndpoint(app_id, new URI(noti_uri));
+			}catch(final Exception uri_e) {
+			}
+		}
+		if(app_id != null && dest_id != null && msg_id != null) {
+			PagEndpointManager manager = PagEndpointManager.getInstance();
+			PagClientEndpoint ep = manager.getEndpointById(dest_id);
+			if(ep == null) {
+				errorResponse(ch, HttpResponseStatus.NOT_FOUND, "Destination " + dest_id + " not found!");
+			}else {
+				PagRequest ack = new PagRequest(ep.getProtocolVersion(), PagMethod.ACK);
+				ack.setDestination(dest_id);
+				ack.addHeader(PagHeaders.Names.MSGID, msg_id);
+				ep.sendRequest(ack);
+				okResponse(ch);
+			}
+		}else {
+			errorResponse(ch, HttpResponseStatus.BAD_REQUEST, "Format: ack?APP=<app>&DEST=<uri>. Header X-Anhe-PAG-MSGID must present.");			
+		}
+	}
+	
+	private void register(HttpRequest request, Map<String, List<String>> params, Channel ch) {
+		String app_id = PagGatewayHttpUtility.getParam(params, "APP");
+		URI uri = null;
+		if(app_id != null && request.containsHeader(PagGatewayHttpUtility.getHeaderPag2Http("URI"))) {
+			String noti_uri = request.getHeader(PagGatewayHttpUtility.getHeaderPag2Http("URI"));
+			try {
+				uri = new URI(noti_uri);
+			}catch(final Exception uri_e) {
+			}
+		}
+		if(app_id != null && uri != null) {
+			PagEndpointManager.getInstance().addHttpEndpoint(app_id, uri);
+			okResponse(ch);
+		} else {
+			errorResponse(ch, HttpResponseStatus.BAD_REQUEST, "Format: register?APP=<app>. Header X-Anhe-PAG-URI must present.");
+		}
+	}
+	
+	private void unregister(HttpRequest request, Map<String, List<String>> params, Channel ch) {
+		String app_id = PagGatewayHttpUtility.getParam(params, "APP");
+		if(app_id != null) {
+			PagEndpointManager.getInstance().removeHttpEndpoint(app_id);
+			okResponse(ch);
+		}else {
+			errorResponse(ch, HttpResponseStatus.BAD_REQUEST, "No app specified. Format: unregister?APP=<app>");
 		}
 	}
 

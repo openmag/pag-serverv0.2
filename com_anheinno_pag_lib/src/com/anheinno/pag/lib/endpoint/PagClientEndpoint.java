@@ -1,15 +1,21 @@
 package com.anheinno.pag.lib.endpoint;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
 
+import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
+import org.jboss.netty.handler.codec.http.HttpHeaders;
 
 import com.anheinno.pag.lib.codec.PagHeaders;
 import com.anheinno.pag.lib.codec.PagRequest;
 import com.anheinno.pag.lib.codec.PagResponseStatus;
+import com.anheinno.pag.lib.http.PagGatewayHttpUtility;
 
 public abstract class PagClientEndpoint extends PagEndpoint {
 	private PagEndpointManager _manager;
@@ -88,10 +94,70 @@ public abstract class PagClientEndpoint extends PagEndpoint {
 			ep.sendRequest(request);
 		}else if(_manager.getHttpNotifyURI(dst_id) != null) {
 			URI uri = _manager.getHttpNotifyURI(dst_id);
-
+			if(relayHttpRequest(uri, request)) {
+				sendResponse(PagResponseStatus.OK);
+			}else {
+				sendResponse(PagResponseStatus.INTERNAL_SERVER_ERROR);
+			}
 		}else {
 			sendResponse(PagResponseStatus.NOT_FOUND);
 		}
+	}
+	
+	private boolean relayHttpRequest(URI uri, PagRequest request) {
+		try {
+			if(uri.getScheme().equalsIgnoreCase("https")) {
+				PagGatewayHttpUtility.installTrustAllSSLFactory();
+			}
+			
+			HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
+			
+			conn.setUseCaches(false);
+			conn.setDoInput(false);
+			
+			ChannelBuffer content = request.getContent();
+
+			if (content.readable()) {
+				conn.setRequestMethod("POST");
+				
+				if(request.containsHeader(PagHeaders.Names.CONTENT_TYPE)) {
+					conn.setRequestProperty(HttpHeaders.Names.CONTENT_TYPE,
+						request.getHeader(PagHeaders.Names.CONTENT_TYPE));
+				}
+				int len = content.readableBytes();
+				byte[] content_bytes = new byte[len];
+				conn.setRequestProperty(HttpHeaders.Names.CONTENT_LENGTH, "" + len);
+
+				conn.setDoOutput(true);
+
+				OutputStream output = null;
+				try {
+					output = conn.getOutputStream();
+					output.write(content_bytes);
+				} finally {
+					if (output != null) {
+						try {
+							output.close();
+						} catch (final IOException logOrIgnore) {
+						}
+					}
+				}
+			} else {
+				conn.setRequestMethod("GET");
+			}
+
+			conn.setRequestProperty(PagGatewayHttpUtility.getHeaderPag2Http("METHOD"), request.getMethod().getName());
+			if(request.containsHeader(PagHeaders.Names.MSGID)) {
+				conn.setRequestProperty(PagGatewayHttpUtility.getHeaderPag2Http(PagHeaders.Names.MSGID), request.getHeader(PagHeaders.Names.MSGID));
+			}
+			
+			if(conn.getResponseCode() >= 200 && conn.getResponseCode() < 300) {
+				return true;
+			}
+		}catch(final Exception e) {
+			
+		}
+		return false;
 	}
 	
 }

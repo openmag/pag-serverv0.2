@@ -50,19 +50,22 @@ public class PagServerHandler extends SimpleChannelUpstreamHandler {
 	    		if(msg instanceof PagRequest && ((PagRequest)msg).getMethod().equals(PagMethod.REG)) {
 					String id = ((PagRequest)msg).getDestination();
 					
-					ep = PagEndpointManager.getInstance().getEndpointById(id);
-					if(ep == null) {
-						if(version.equals(PagVersion.PAM_1_0)) {
-	    					ep = new PagMobileEndpoint(id, e.getChannel());
-	    				}else {
-	    					ep = new PagApplicationEndpoint(id, e.getChannel());
-	    				}
-						PagEndpointManager.getInstance().addEndpoint(ep);	
+					if(id != null) {
+						ep = PagEndpointManager.getInstance().getEndpointById(id);
+						if(ep == null) {
+							if(version.equals(PagVersion.PAM_1_0)) {
+		    					ep = new PagMobileEndpoint(id, e.getChannel());
+		    				}else {
+		    					ep = new PagApplicationEndpoint(id, e.getChannel());
+		    				}
+							PagEndpointManager.getInstance().addEndpoint(ep);	
+						}else {
+							PagEndpointManager.getInstance().replaceEndpointChannel(ep, e.getChannel());
+						}
+						ep.handleRequestMessage((PagRequest)msg);
 					}else {
-						PagEndpointManager.getInstance().replaceEndpointChannel(ep, e.getChannel());
+						sendError(msg, PagResponseStatus.BAD_REQUEST, e.getChannel(), true);
 					}
-					ep.handleRequestMessage((PagRequest)msg);
-					
 				}else {
 					sendError(msg, PagResponseStatus.METHOD_NOT_ALLOWED, e.getChannel(), true);
 				}
