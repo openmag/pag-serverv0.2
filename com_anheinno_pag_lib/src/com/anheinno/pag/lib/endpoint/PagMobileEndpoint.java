@@ -69,13 +69,13 @@ public class PagMobileEndpoint extends PagClientEndpoint {
 		if(interval_str != null) {
 			interval = Integer.parseInt(interval_str);
 		}
+		System.out.println("init interval: " + interval);
 		String status = request.getHeader(PagHeaders.Names.STATUS);
 		if(status != null) {
+			resetInterval(interval);
 			_mobile_status = MobileEndpointStatus.eval(status);
 			if(_mobile_status == MobileEndpointStatus.CHOKE) {
 				decInterval();
-			}else {
-				resetInterval(interval);
 			}
 		}else {
 			_mobile_status = MobileEndpointStatus.NORMAL;
@@ -93,11 +93,13 @@ public class PagMobileEndpoint extends PagClientEndpoint {
 			}
 			_interval_keep_count = 0;
 		}
+		System.out.println("Inc interval to " + _interval);
 	}
 	
 	private void resetInterval(int init_interval) {
 		_interval = init_interval;
-		_interval_keep_count = MIN_INTERVAL-1;
+		_interval_keep_count = INTERVAL_KEEP_TIMES - 1;
+		System.out.println("Reset interval to " + _interval);
 	}
 	
 	private void decInterval() {
@@ -106,6 +108,7 @@ public class PagMobileEndpoint extends PagClientEndpoint {
 			_interval = MIN_INTERVAL;
 		}
 		_interval_keep_count = 0;
+		System.out.println("Dec interval to " + _interval);
 	}
 
 	protected int getAndUpdateActivateInterval() {

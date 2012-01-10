@@ -125,6 +125,7 @@ public abstract class PagEndpoint implements TimerTask {
 	public void handleRequestMessage(PagRequest request) {
 		if(getStatus().equals(PagEndpointStatus.PAG_ENDPOINT_INIT)) {
 			if(request.getMethod().equals(PagMethod.REG)) {
+				System.out.println("Handle REG message: " + request);
 				handleRegisterRequest(request);
 			} else {
 				sendResponse(PagResponseStatus.METHOD_NOT_ALLOWED);
@@ -238,10 +239,13 @@ public abstract class PagEndpoint implements TimerTask {
 	
 	public void run(Timeout timer) throws Exception {
 		if(_channel.isConnected()) {
-			if(_activate_timer != null && timer == _activate_timer) {
-				sendActivateRequest();
-			}else if(_request_timer != null && timer == _request_timer) {
-				handleResponseMessage(null);
+			if(_status.equals(PagEndpointStatus.PAG_ENDPOINT_IDLE)
+					|| _status.equals(PagEndpointStatus.PAG_ENDPOINT_REQUEST_SENT)) {
+				if(_activate_timer != null && timer == _activate_timer) {
+					sendActivateRequest();
+				}else if(_request_timer != null && timer == _request_timer) {
+					handleResponseMessage(null);
+				}
 			}
 		}else {
 			System.out.println("Connection closed!!");
@@ -293,10 +297,10 @@ public abstract class PagEndpoint implements TimerTask {
 	
 	public synchronized void replaceChannel(Channel ch) {
 		synchronized(_message_queue) {
-			//System.out.println("replaceChannel " + _channel.getId() + " with " + ch.getId());
+			System.out.println("replaceChannel " + _channel.getId() + " with " + ch.getId());
+			setStatus(PagEndpointStatus.PAG_ENDPOINT_INIT);
 			this._channel.close();
 			this._channel = ch;
-			setStatus(PagEndpointStatus.PAG_ENDPOINT_INIT);
 		}
 	}
 	
